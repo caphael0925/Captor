@@ -276,13 +276,25 @@
         <JAVADOC>
           <root url="jar://$USER_HOME$/.ivy2/cache/com.esotericsoftware.reflectasm/reflectasm/docs/reflectasm-1.07-javadoc.jar!/" />
           <root url="jar://$USER_HOME$/.ivy2/cache/org.apache.mesos/mesos/docs/mesos-0.21.1-javadoc.jar!/" />
+          <root url="jar://$USER_HOME$/.ivy2/cache/com.esotericsoftware.reflectasm/reflectasm/docs/reflectasm-1.07-javadoc.jar!/" />
+          <root url="jar://$USER_HOME$/.ivy2/cache/org.apache.mesos/mesos/docs/mesos-0.21.1-javadoc.jar!/" />
         </JAVADOC>
         <SOURCES>
+          <root url="jar://$USER_HOME$/.ivy2/cache/com.esotericsoftware.reflectasm/reflectasm/srcs/reflectasm-1.07-sources.jar!/" />
+          <root url="jar://$USER_HOME$/.ivy2/cache/org.apache.mesos/mesos/srcs/mesos-0.21.1-sources.jar!/" />
           <root url="jar://$USER_HOME$/.ivy2/cache/com.esotericsoftware.reflectasm/reflectasm/srcs/reflectasm-1.07-sources.jar!/" />
           <root url="jar://$USER_HOME$/.ivy2/cache/org.apache.mesos/mesos/srcs/mesos-0.21.1-sources.jar!/" />
         </SOURCES>
       </library>
     </orderEntry>
-    <orderEntry type="library" name="capcommon_2.10-1.0" level="project" />
+    <orderEntry type="module-library">
+      <library name="SBT: unmanaged-jars">
+        <CLASSES>
+          <root url="jar://$MODULE_DIR$/../../lib/capcommon_2.10-1.0.jar!/" />
+        </CLASSES>
+        <JAVADOC />
+        <SOURCES />
+      </library>
+    </orderEntry>
   </component>
 </module>
