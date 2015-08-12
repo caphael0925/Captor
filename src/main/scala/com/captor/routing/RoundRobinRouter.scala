@@ -6,9 +6,9 @@ package com.captor.routing
 
 import akka.actor.{ActorRef, Props, Actor}
 import akka.routing.{Routee, ActorRefRoutee, RoundRobinRoutingLogic, Router}
+import com.captor.message.SignleRequest
 
-abstract class RoundRobinRouter extends Actor{
-  def actors:Seq[ActorRef]
+class RoundRobinRouter(actors:Seq[ActorRef]) extends Actor{
 
   lazy val router = {
     val routees = actors.map{
@@ -21,8 +21,8 @@ abstract class RoundRobinRouter extends Actor{
   }
 
   def receive:Receive = {
-    case _ =>
-      router.route(true, sender())
+    case m:SignleRequest.Value =>
+      router.route(m, sender())
   }
 
 }

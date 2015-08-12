@@ -1,7 +1,10 @@
 package com.captor.keeper
 
+import akka.event.Logging
+import akka.event.slf4j.Logger
 import com.captor.keeper.duration.DurationGeneratorLike
 import akka.actor.Actor
+import com.captor.message.SignleRequest._
 
 /**
  * Created by caphael on 15/8/10.
@@ -11,15 +14,30 @@ import akka.actor.Actor
  *  KepperStrategy会以Trait的方式混入到Keeper中
  *
  */
-abstract class Keeper[T](val elem:T,val durGen:DurationGeneratorLike) extends Actor{
-  var LASTREQUEST:Long = 0L
-  def DUR_GENERATOR=durGen
+abstract class Keeper[I,O](val ELEMENT:I) extends Actor{
 
-  def __request
+  protected val log = Logging(context.system,this)
+  protected def HANDOUT:O
 
-  override def receive: Receive = {
-    case _ => {
-      __request
-    }
+  protected def postInstant(out:O):Unit = sender ! out
+
+  protected def matchOthers:Receive={
+    case msg:Any => matchNothing(msg)
+  }
+  protected def matchNothing(msg:Any):Unit = log.error(s"Match Error! Unacceptable Message:${msg}")
+
+  def receive:Receive={
+    /**
+     *  Keeper默认情况下只处理ELEMENT_REQUEST_INSTANT
+     *  如果接收到的消息不是ELEMENT_REQUEST_INSTANT，就丢给matchOthers处理
+     *  默认情况下matchOther会记录一条MatchError的错误日志
+     *  可以通过重写matchOthers来扩展Keeper
+     */
+    case ELEMENT_REQUEST =>
+      postInstant(HANDOUT)
+
+    case msg:Any =>
+      matchOthers(msg)
+
   }
 }

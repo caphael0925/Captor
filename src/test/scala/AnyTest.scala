@@ -1,3 +1,5 @@
+import com.captor.keeper.strategy.PureKeeperWithDurationStrategy
+
 /**
  * Created by caphael on 15/7/24.
  */
@@ -11,7 +13,6 @@ object AnyTest extends App{
   import java.net.InetSocketAddress
   import java.net.{Proxy => JProxy}
   import com.captor.keeper.duration.DurationGeneratorLike
-  import com.captor.keeper.strategy.TimesLimitStrategy
   import scala.concurrent.duration._
   import akka.actor.{Props, ActorSystem}
   import com.captor.keeper.Keeper
@@ -20,24 +21,36 @@ object AnyTest extends App{
   import scala.concurrent.Await
   import scala.xml.{Elem, XML}
   import com.captor.keeper.duration.UniformDurationGenerator
-  import com.captor.routing.ProxyRoundRobinRouter
+  import com.captor.routing.RoundRobinRouter
   import com.captor.utils.{ProxyUtils}
 
+  import com.captor.message.SignleRequest._
 
   implicit val timeout = Timeout(10 seconds)
 
   val system = ActorSystem("test")
 
+  val proxyPool = ProxyUtils.loadProxies().map{
+    case proxy=>
+      system.actorOf(
+        Props{
+          new PureKeeperWithDurationStrategy[JProxy](proxy) {
+            override def DUR_GENERATOR: DurationGeneratorLike = UniformDurationGenerator(1 minutes, 1)
+          }
+        }
+      )
+  }
+
   val router = system.actorOf(
-   Props{ new ProxyRoundRobinRouter(ProxyUtils.loadProxies()) {
-     override def newDurationGenerator: DurationGeneratorLike = UniformDurationGenerator(1 minutes, 1)
-   }
+   Props{ new RoundRobinRouter(proxyPool)
    },"ProxyRouter-RoundRobin"
   )
 
 //  val f = router ? ""
 
-  val calls =(1 to 100).map(x=> router ? "")
+  val conf = <conf><url>jdbc:hive2://proxy:6666</url><sql>select distinct other_id from hujiao.hobby_book_id</sql></conf>
+
+  val calls =(1 to 100).map(x=> router ? ELEMENT_REQUEST_SCHEDULE)
 
   calls.foreach(x=>println(x.value))
 

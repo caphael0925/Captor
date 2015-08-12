@@ -7,19 +7,17 @@ import scala.xml.Elem
 /**
  * Created by caphael on 15/8/11.
  */
-trait LoadFromSparkSQL extends DataLoader[Seq[String]]{
+object SparkSQLDataLoader extends DataLoader[Seq[String]]{
   case class Config(
                    val url:String,
                    val sql:String
                      )
 
   def load(conf:Elem):Seq[Seq[String]] ={
-    val c = parse(conf)
+    val c = parseConf(conf)
 
     Class.forName("org.apache.hive.jdbc.HiveDriver")
     val conn = DriverManager.getConnection(c.url)
-
-    val colPattern = "".r
 
     val ret = try{
       val statement = conn.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
@@ -28,7 +26,7 @@ trait LoadFromSparkSQL extends DataLoader[Seq[String]]{
       val meta = rs.getMetaData
 
       def results:Stream[Seq[String]] = {if(rs.next) extractRow(rs,meta.getColumnCount) else null } #:: results
-      results.takeWhile(_!=null)
+      results.takeWhile(_!=null).toArray
 
     }finally {
       conn.close()
@@ -37,12 +35,9 @@ trait LoadFromSparkSQL extends DataLoader[Seq[String]]{
     ret
   }
 
-  def parse(conf:Elem): Config ={
+  def parseConf(conf:Elem): Config ={
     conf match {
-      case <conf>
-        <url>{cUrl}</url>
-        <sql>{cSql}</sql>
-        </conf> => Config(cUrl.text,cSql.text.toLowerCase)
+      case <conf><url>{cUrl}</url><sql>{cSql}</sql></conf> => Config(cUrl.text,cSql.text.toLowerCase)
     }
   }
 
