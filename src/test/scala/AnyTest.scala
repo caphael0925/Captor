@@ -1,4 +1,3 @@
-import com.captor.keeper.strategy.PureKeeperWithDurationStrategy
 
 /**
  * Created by caphael on 15/7/24.
@@ -8,72 +7,53 @@ import com.captor.keeper.strategy.PureKeeperWithDurationStrategy
 
 
 object AnyTest extends App{
-  import akka.actor.Actor
-  import akka.util.Timeout
-  import java.net.InetSocketAddress
-  import java.net.{Proxy => JProxy}
-  import com.captor.keeper.duration.DurationGeneratorLike
-  import scala.concurrent.duration._
+
+
+  import java.net.HttpURLConnection
+
   import akka.actor.{Props, ActorSystem}
-  import com.captor.keeper.Keeper
-  import akka.pattern._
-  import scala.concurrent.ExecutionContext.Implicits.global
-  import scala.concurrent.Await
-  import scala.xml.{Elem, XML}
-  import com.captor.keeper.duration.UniformDurationGenerator
-  import com.captor.routing.RoundRobinRouter
-  import com.captor.utils.{ProxyUtils}
+  import akka.util.Timeout
+  import com.captor.douban.book.BookCaptor.Config
+  import com.captor.douban.book.Master
+  import com.captor.utils.ProxyUtils
+
+  import scala.io.Source
+  import akka.routing._
 
   import com.captor.message.SignleRequest._
+  import akka.pattern._
+  import scala.concurrent.duration._
+  import scala.concurrent.ExecutionContext.Implicits.global
 
   implicit val timeout = Timeout(10 seconds)
 
-  val system = ActorSystem("test")
-
-  val proxyPool = ProxyUtils.loadProxies().map{
-    case proxy=>
-      system.actorOf(
-        Props{
-          new PureKeeperWithDurationStrategy[JProxy](proxy) {
-            override def DUR_GENERATOR: DurationGeneratorLike = UniformDurationGenerator(1 minutes, 1)
-          }
-        }
-      )
-  }
-
-  val router = system.actorOf(
-   Props{ new RoundRobinRouter(proxyPool)
-   },"ProxyRouter-RoundRobin"
+  val system = ActorSystem("Crawler")
+  val conf = Config().copy(spiders = 8)
+  val master = system.actorOf(
+    Props{
+      new Master(conf)
+    },"MASTER"
   )
 
-//  val f = router ? ""
+  val proxy = ProxyUtils.loadProxies()(0)
 
-  val conf = <conf><url>jdbc:hive2://proxy:6666</url><sql>select distinct other_id from hujiao.hobby_book_id</sql></conf>
+  val url = "http://api.douban.com/v2/book/1443043"
+  val connection: HttpURLConnection = new java.net.URL(url).openConnection(proxy).asInstanceOf[HttpURLConnection]
+  Source.fromInputStream(connection.getInputStream).getLines.mkString
 
-  val calls =(1 to 100).map(x=> router ? ELEMENT_REQUEST_SCHEDULE)
 
-  calls.foreach(x=>println(x.value))
+  master ! MASTER_START
 
-//  val res = Await.result[JProxy](f.mapTo[JProxy],10 seconds)
+  //获取Master的运行报告
+  (master ? MASTER_REPORT).foreach(println(_))
 
-//  println(res)
+  //检查ProxyRouter容量
+  val proxies=(system.actorSelection(master.path.child("ProxyRouter-RoundRobin")) ? GetRoutees).mapTo[Routees]
+  proxies.value.get.get.routees.length
 
-  system.shutdown
-//  class Tester extends Actor{
-//    override def receive: Receive = {
-//      case _ => {
-//        val f = (keeper ? "").mapTo[JProxy]
-//        f.foreach(println(_))
-//      }
-//    }
-//  }
-//
-//  val tester = system.actorOf(Props[Tester],"tester")
-//
-//  for(i <- 1 to 10){
-//    tester ! ""
-//  }
-
+  //检查SpiderRouter容量
+  val spiders=(system.actorSelection(master.path.child("SpiderRouter-RoundRobin")) ? GetRoutees).mapTo[Routees]
+  spiders.value.get.get.routees.length
 
 
 }

@@ -2,7 +2,7 @@ package com.captor.keeper
 
 import akka.event.Logging
 import akka.event.slf4j.Logger
-import com.captor.keeper.duration.DurationGeneratorLike
+import com.captor.keeper.duration.IntervalGeneratorLike
 import akka.actor.Actor
 import com.captor.message.SignleRequest._
 
@@ -19,12 +19,18 @@ abstract class Keeper[I,O](val ELEMENT:I) extends Actor{
   protected val log = Logging(context.system,this)
   protected def HANDOUT:O
 
-  protected def postInstant(out:O):Unit = sender ! out
+  protected def postInstant(out:O):Unit = {
+    sender ! out
+  }
 
   protected def matchOthers:Receive={
     case msg:Any => matchNothing(msg)
   }
   protected def matchNothing(msg:Any):Unit = log.error(s"Match Error! Unacceptable Message:${msg}")
+
+  protected def caseOtherExceptions:PartialFunction[Exception,Unit]={
+    case _ =>
+  }
 
   def receive:Receive={
     /**
@@ -34,7 +40,12 @@ abstract class Keeper[I,O](val ELEMENT:I) extends Actor{
      *  可以通过重写matchOthers来扩展Keeper
      */
     case ELEMENT_REQUEST =>
-      postInstant(HANDOUT)
+      try{
+        postInstant(HANDOUT)
+      }catch{
+        case e:Exception =>
+          caseOtherExceptions(e)
+      }
 
     case msg:Any =>
       matchOthers(msg)
