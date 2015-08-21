@@ -16,7 +16,7 @@ case object M_MASTER_INIT
 //启动Master
 case object M_MASTER_START
 //停止Master
-private[captor] case object M_MASTER_STOP_NOW
+private[captor] case object M_MASTER_STOP_IMMEDIATE
 //停止请求
 case object M_MASTER_STOP
 
@@ -48,7 +48,7 @@ case class M_WORKER_RUN(target:String,proxy:JProxy)
 //Imply master which target with a proxy had been failed
 case class M_WORKER_FAILED(target:RetryEntry,proxy:JProxy)
 //Crawling of this spider had been completed
-case class M_WORKER_COMPLETE(target:String)
+case class M_WORKER_SUCCEED(target:String)
 //Discard the target
 case class M_WORKER_DISCARD(target: RetryEntry)
 

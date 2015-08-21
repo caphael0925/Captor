@@ -14,27 +14,32 @@ object FetchProxyListFromXiCi {
   val TAR_URL="http://www.xici.net.co/nt"
 
   def getProxyInfoList():Seq[(String,Int,String)]={
-    val driver = new PhantomJSDriver()
+    try{
+      val driver = new PhantomJSDriver()
 
-    driver.get(TAR_URL)
-    val rows= driver.findElementsByXPath("//table[@id='ip_list']//tr")
+      driver.get(TAR_URL)
+      val rows= driver.findElementsByXPath("//table[@id='ip_list']//tr")
 
-    //把表头移除
-    rows.remove(0)
+      val statPattern = ".*([0-9]+)$".r
 
-    val statPattern = ".*([0-9]+)$".r
+      //Ignore table's header
+      val res = for(i <- 1 until rows.size) yield {
+        val cells = rows.get(i).findElements(By.tagName("td"))
+        val ip = cells.get(2).getText
+        val port = cells.get(3).getText.toInt
+        val ptype = cells.get(6).getText
+        (ip,port,ptype)
+      }
 
-    val res = for(i <- 0 until rows.size) yield {
-      val cells = rows.get(i).findElements(By.tagName("td"))
-      val ip = cells.get(2).getText
-      val port = cells.get(3).getText.toInt
-      val ptype = cells.get(6).getText
-      (ip,port,ptype)
+      driver.close
+
+      res
+    }catch{
+      case e:Exception =>
+        e.printStackTrace
+        Seq[(String,Int,String)]()
     }
 
-    driver.close
-
-    res
   }
 
 

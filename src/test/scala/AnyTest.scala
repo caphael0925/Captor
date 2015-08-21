@@ -34,7 +34,7 @@ object AnyTest extends App{
   implicit val timeout = Timeout(10 seconds)
 
   val system = ActorSystem("Crawler")
-  val conf = BookCaptor.Config().copy(spiders = 10)
+  val conf = BookCaptor.Config(spiders = 10,outpath = "output/book.out",failedpath = "discard/book.dis")
   val master = system.actorOf(
     Props{
       new DoubanMaster(conf)

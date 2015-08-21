@@ -62,8 +62,8 @@ class DoubanMaster(masterConf:Config) extends AbstractMaster{
   override val retryWorkerNum: Int = 2
 
   override def getReport: String ={
-    IndexedSeq(s"RunningTargets:${STARTED_COUNT - COMPLETED_COUNT - DISCARD_COUNT}" ,
-      s"CompletedTargets:${COMPLETED_COUNT}" ,
+    IndexedSeq(s"RunningTargets:${STARTED_COUNT - SUCCEED_COUNT - DISCARD_COUNT}" ,
+      s"CompletedTargets:${SUCCEED_COUNT}" ,
       s"FailedProcesses:${FAILED_COUNT}" ,
       s"DiscardTargets:${DISCARD_COUNT}" ,
       s"${

@@ -53,7 +53,7 @@ abstract class RetryWorker (val master:ActorPath,val proxyRouter:ActorPath,val t
       try{
         val response = crawl(targetFormat(target),proxy)
         context.actorSelection(serializer) ! M_SERIALIZE_WRITE[String](s"${target},${response}")
-        context.system.actorSelection(master) ! M_WORKER_COMPLETE(target)
+        context.system.actorSelection(master) ! M_WORKER_SUCCEED(target)
       } catch{
         case e:Exception =>
           log.warning(e.getMessage)

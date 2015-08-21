@@ -12,6 +12,7 @@ import com.captor.serializer.DataSerializer
 import com.captor.utils.{ProxyUtils, FetchProxyListFromXiCi}
 
 import scala.collection.mutable.Queue
+import scala.concurrent.{Future, Await}
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 import java.net.{Proxy=>JProxy}
@@ -24,25 +25,28 @@ abstract class AbstractMaster extends Actor with ActorLogging{
   implicit var timeout = Timeout(10 seconds)
 
   /** =========================================
-   * Master的内部控制变量
+   * Master Control
    */
-  //记录TargetList是否为空
+  //Whether the target queue is empty
   var TARGET_EMPTY = false
-  //启动了多少次Worker
+  //How many targets were started
   var STARTED_COUNT = 0
-  //已完成了多少target
-  var COMPLETED_COUNT = 0
-  //有多少次Worker失败了
+  //How many targets were successful
+  var SUCCEED_COUNT = 0
+  //How many targets were failed
   var FAILED_COUNT = 0
-  //放弃了多少target
+  //How many targets were discarded
   var DISCARD_COUNT = 0
 
-  //Maxmium times to retry
+  //Maxmium times to retry for each failed target
   var MAX_RETRY = 5
 
-  //Proxy Routees Control
-  var PROXY_ROUTEES = 0
+  //Proxy Control
+  //When size of proxy pool below PORXIES_LOW_MARK, refresh the proxy pool
+  var PORXIES_LOW_MARK = 10
+  var PROXIES_REFRESHING = false
 
+  //Stopping Status
   var STOPPING = false
   var STOPPED = false
 
@@ -65,7 +69,7 @@ abstract class AbstractMaster extends Actor with ActorLogging{
   def newRetryWorker:AbstractWorker
 
   /** ==========================================
-   * Children:
+   * Members:
    */
   //ProxyKeepers和ProxyRouter
   def proxyList:Seq[JProxy]
@@ -91,7 +95,7 @@ abstract class AbstractMaster extends Actor with ActorLogging{
     },"TargetKeeper"
   )
 
-  //Serializer
+  //Serializers
   lazy val outputSerializer:ActorRef = context.actorOf(
     Props{
       newOutputSerializer
@@ -114,7 +118,7 @@ abstract class AbstractMaster extends Actor with ActorLogging{
     ,"SpiderRouter-Balancing"
   )
 
-  //RetryWorker&RetryRouter
+  //RetryKeeperr&RetryRouter
 
   //RetryKeeper
   lazy val retryKeeper:ActorRef = context.actorOf(
@@ -139,8 +143,106 @@ abstract class AbstractMaster extends Actor with ActorLogging{
    * 消息处理：
    */
   override def receive: Receive = {
-
+    //Initialize master
     case M_MASTER_INIT =>
+      MessagesDealingFunctions.master_init
+    //Start master
+    case M_MASTER_START =>
+      MessagesDealingFunctions.master_start
+    //Target's dealing is successful
+    case M_WORKER_SUCCEED(target:String) =>
+      MessagesDealingFunctions.worker_succeed(target)
+    //Target's dealing is failed
+    case M_WORKER_FAILED(target:RetryEntry,proxy:JProxy) =>
+      MessagesDealingFunctions.worker_failed(target,proxy)
+    //Retry to deal the failed target
+    case  M_WORKER_RETRY(entry) =>
+      MessagesDealingFunctions.worker_retry(entry)
+    //Discard the failed target
+    case M_WORKER_DISCARD(entry) =>
+      MessagesDealingFunctions.worker_discard(entry)
+    //Stop master decently
+    case M_MASTER_STOP =>
+      MessagesDealingFunctions.master_stop
+    //Stop master immediately
+    case M_MASTER_STOP_IMMEDIATE =>
+      MessagesDealingFunctions.master_stop_immediate
+    //Target queue was empty
+    case M_ELEMENT_EMPTY("TargetKeeper") =>
+      MessagesDealingFunctions.target_empty
+    //Proxy pool was empty
+    case M_ELEMENT_EMPTY("ProxyKeeper") =>
+      MessagesDealingFunctions.proxy_empty
+    //Report the status of master
+    case M_COMMON_REPORT =>
+      MessagesDealingFunctions.commen_report
+    //Return the master itself
+    case M_COMMON_SELF =>
+      sender ! this
+  }
+
+  @inline
+  def getReport:String
+
+  @inline
+  def startNext: Unit ={
+    if(!STOPPING){
+      spiderRouter ! M_WORKER_NEXT
+      STARTED_COUNT += 1
+    }else{
+      log.warning("Master has been stopped! Nothing should be continue...")
+    }
+  }
+
+  def refreshProxies: Unit ={
+    log.warning("Proxy routees are nearly exhausting!")
+    log.info("Load new proxies")
+
+    val appendProxies:Seq[JProxy] = FetchProxyListFromXiCi.getProxyInfoList().map{
+      case (ip,port,_) =>
+        ProxyUtils.createProxy(ip,port)
+    }
+
+    //Create new Proxy Keeper
+    log.debug("Create new proxy keepers")
+    val appendProxyKeepers:Seq[ActorRef] = appendProxies.map{
+      case proxy=>
+        try{
+          context.actorOf(
+            Props(
+              newProxyKeeper(proxy)
+            ),proxy.address().toString.tail
+          )
+        }catch{
+          //If the Keeper for current proxy exists,return null to be filtered
+          case e:InvalidActorNameException => null
+          case e:Exception =>
+            e.printStackTrace
+            null
+        }
+    }.filter(_!=null)
+
+    //Add new Proxy Keepers to ProxyRouter
+    log.info("Append new proxy keepers to keeper router")
+    appendProxyKeepers.foreach{
+      case routee=>
+        log.debug(s"Append proxy keeper [${routee.toString}] to keeper router")
+        proxyRouter ! AddRoutee(ActorSelectionRoutee(context.actorSelection(routee.path)))
+    }
+
+  }
+
+  @inline
+  def futureProxyPoolSize:Future[Int]={
+    (proxyRouter ? GetRoutees).mapTo[Routees].map(_.routees.length)
+  }
+
+  /** =======================================================
+   *  Messages Dealing Functions(inline)
+   */
+  private[this] object MessagesDealingFunctions{
+    @inline
+    def master_init: Unit ={
       //Initialization
       log.info("***********Master Initialization***********")
       log.info(s"Proxy Router Prepared:${proxyRouter}")
@@ -152,54 +254,102 @@ abstract class AbstractMaster extends Actor with ActorLogging{
       log.info(s"Discard Serializer Prepared:${discardSerializer}")
 
       sender ! M_COMMON_SUCCEED
+    }
 
-    /** ---------------------------------------------------
-     * 启动Master
-     */
-    case M_MASTER_START =>
+    @inline
+    def master_start: Unit ={
       log.info("***********Master Start***********")
       STOPPING = false
       STOPPED = false
       //Update PROXY_ROUTEES
       (proxyRouter ? GetRoutees).mapTo[Routees].map{
         case routees =>
-          PROXY_ROUTEES = routees.routees.length
 
           //Broadcast starting message to all workers
           log.debug(s"Start ${workerNum} workers")
           spiderRouter ! Broadcast(M_WORKER_NEXT)
           STARTED_COUNT += workerNum
       }
-
-
-    /** ---------------------------------------------------
-     * 反馈当前运行状态
-     */
-    case M_COMMON_REPORT =>{
-      val report = getReport
-      sender ! report
     }
 
-    /** ---------------------------------------------------
-     * 返回Master本身
-     */
-    case M_COMMON_SELF =>
-      sender ! this
+    @inline
+    def worker_succeed(target:String): Unit ={
+      log.info(s"Target [${target}] is completed")
+      //Count of completed workers increment
+      SUCCEED_COUNT += 1
 
-    /** ---------------------------------------------------
-     * 被告知TargetKeeper已空（该爬的都爬完了）
-     */
-    case M_ELEMENT_EMPTY("TargetKeeper") =>
-      log.warning("TargetKeeper is empty!")
-      TARGET_EMPTY = true
+      if(TARGET_EMPTY) STOPPING = true
+
+      //如果Target池已空，同时所有已经启动的Spider都完成了
+      if(STOPPING && STARTED_COUNT == (SUCCEED_COUNT + DISCARD_COUNT)){
+        self ! M_MASTER_STOP_IMMEDIATE
+      }else{
+        //Start next worker's job
+        log.debug("Imply a worker to start for the next")
+        startNext
+      }
+    }
+
+    @inline
+    def worker_failed(target:RetryEntry,proxy:JProxy): Unit ={
+      log.info(s"Target [${target.target}] with proxy [${proxy.address.toString.tail}] is failed, start retrying(${target.retries} times had been retry)")
+
+      //记录失败数
       FAILED_COUNT += 1
-      STARTED_COUNT -= 1
 
-    /** ---------------------------------------------------
-     *  停止Master
-     */
-    case M_MASTER_STOP_NOW =>
+      //Remove the failed proxy keeper from proxy router
+      val failedProxy = context.actorSelection(self.path.child(proxy.address.toString.tail))
+      log.info(s"Remove the proxy keeper [${failedProxy.pathString}] from proxy router")
+      proxyRouter ! RemoveRoutee(ActorSelectionRoutee(failedProxy))
 
+      //If number of proxy routees below 10,try to append proxy routees
+      futureProxyPoolSize.foreach{
+        case poolSize=>
+          if(!PROXIES_REFRESHING && poolSize<=PORXIES_LOW_MARK){
+            PROXIES_REFRESHING = true
+            refreshProxies
+            PROXIES_REFRESHING = false
+          }
+
+          //进行Retry
+          self ! M_WORKER_RETRY(target)
+      }
+    }
+
+    @inline
+    def worker_retry(entry:RetryEntry): Unit ={
+      log.info(s"Take the retrying request for target [${entry.target}]")
+      //Whether retries for the target has reached the MAX_RETRY
+      if( entry.retries >= MAX_RETRY ){
+        log.warning(s"The retries of target [${entry.target}] excessed MAX_RETRY(${MAX_RETRY})! ")
+        log.warning(s"The target [${entry.target}] was discarded!!")
+        self ! M_WORKER_DISCARD(entry)
+
+      }else{
+        //Add the failed target to retry-keeper
+        log.info(s"Add the target [${entry.target}] to retry keeper")
+        (retryKeeper ? M_ELEMENT_ADD[RetryEntry](entry)).map{
+          case M_COMMON_SUCCEED =>
+            log.debug(s"Imply a retry worker to start for the next")
+            retryRouter ! M_WORKER_NEXT
+        }
+      }
+    }
+
+    @inline
+    def worker_discard(entry:RetryEntry): Unit ={
+      //if it archived send the target to discard-serializer
+      discardSerializer ! M_SERIALIZE_WRITE[String](entry.target)
+      DISCARD_COUNT += 1
+
+      //Try to start a new target dealing
+      log.debug("Imply a worker to start for the next")
+      startNext
+    }
+
+
+    @inline
+    def master_stop_immediate: Unit ={
       //关闭FileWriter
       log.info("Close output serializer")
       outputSerializer ! M_SERIALIZER_CLOSE
@@ -210,135 +360,34 @@ abstract class AbstractMaster extends Actor with ActorLogging{
 
       log.info("Stop the System")
       context.system.shutdown
+    }
 
-    case M_MASTER_STOP =>
+    @inline
+    def master_stop: Unit ={
       STOPPING = true
       log.info("Master is stopping")
+    }
 
-    /** ---------------------------------------------------
-     * 被告知Spider的爬取失败了 处理
-     */
-    case M_WORKER_FAILED(target:RetryEntry,proxy:JProxy) =>
-      log.info(s"Target [${target.target}] with proxy [${proxy.address.toString.tail}] is failed, start retrying(${target.retries} times had been retry)")
-
-      //记录失败数
+    @inline
+    def target_empty: Unit ={
+      log.warning("TargetKeeper is empty!")
+      TARGET_EMPTY = true
       FAILED_COUNT += 1
-
-      //If number of proxy routees below 10,try to append proxy routees
-      if(PROXY_ROUTEES<=10){
-        log.warning("Proxy routees are nearly exhausting!")
-        log.info("Load new proxies")
-        val appendProxies:Seq[JProxy] = FetchProxyListFromXiCi.getProxyInfoList().map{
-          case (ip,port,_) =>
-            ProxyUtils.createProxy(ip,port)
-        }
-
-        //Create new Proxy Keeper
-        log.debug("Create new proxy keepers")
-        val appendProxyKeepers:Seq[ActorRef] = appendProxies.map{
-          case proxy=>
-            try{
-              context.actorOf(
-                Props(
-                  newProxyKeeper(proxy)
-                ),proxy.address().toString.tail
-              )
-            }catch{
-              //If the Keeper for current proxy exists,return null to be filtered
-              case e:InvalidActorNameException => null
-              case e:Exception =>
-                e.printStackTrace
-                null
-            }
-        }.filter(_!=null)
-
-        //Add new Proxy Keepers to ProxyRouter
-        log.info("Append new proxy keepers to keeper router")
-        appendProxyKeepers.foreach{
-          case routee=>
-            log.debug(s"Append proxy keeper [${routee.toString}] to keeper router")
-            proxyRouter ! AddRoutee(ActorSelectionRoutee(context.actorSelection(routee.path)))
-        }
-        PROXY_ROUTEES += appendProxyKeepers.length
-
-      }
-
-      //Remove the failed proxy keeper from proxy router
-      val failedProxy = context.actorSelection(self.path.child(proxy.address.toString.tail))
-      log.info(s"Remove the proxy keeper [${failedProxy.pathString}] from proxy router")
-      proxyRouter ! RemoveRoutee(ActorSelectionRoutee(failedProxy))
-      PROXY_ROUTEES -= 1
-
-      //进行Retry
-      self ! M_WORKER_RETRY(target)
-
-    /** ---------------------------------------------------
-     * 重试
-     */
-    case  M_WORKER_RETRY(entry) =>
-      log.info(s"Take the retrying request for target [${entry.target}]")
-      //Whether retries for the target has reached the MAX_RETRY
-      if( entry.retries >= MAX_RETRY ){
-        log.warning(s"The retries of target [${entry.target}] excessed MAX_RETRY(${MAX_RETRY})! ")
-        log.warning(s"The target [${entry.target}] was discarded!!")
-        self ! M_WORKER_DISCARD(entry)
-        
-      }else{
-        //Add the failed target into retry-keeper
-        log.info(s"Add the target [${entry.target}] to retry keeper")
-        (retryKeeper ? M_ELEMENT_ADD[RetryEntry](entry)).map{
-          case M_COMMON_SUCCEED =>
-            log.debug(s"Imply a retry worker to start for the next")
-            retryRouter ! M_WORKER_NEXT
-        }
-      }
-
-    /** ---------------------------------------------------
-      * Discard
-      */
-    case M_WORKER_DISCARD(entry) =>
-      //if it archived send the target to discard-serializer
-      discardSerializer ! M_SERIALIZE_WRITE[String](entry.target)
-      DISCARD_COUNT += 1
-
-      //Try to start a new target dealing
-      log.debug("Imply a worker to start for the next")
-      startNext
-
-
-    /** ---------------------------------------------------
-     * 判断何时结束
-     */
-    case M_WORKER_COMPLETE(target:String) =>{
-
-      log.info(s"Target [${target}] is completed")
-      //Count of completed workers increment
-      COMPLETED_COUNT += 1
-
-      if(TARGET_EMPTY) STOPPING = true
-
-      //如果Target池已空，同时所有已经启动的Spider都完成了
-      if(STOPPING && STARTED_COUNT == (COMPLETED_COUNT + DISCARD_COUNT)){
-        self ! M_MASTER_STOP_NOW
-      }else{
-        //Start next worker's job
-        log.debug("Imply a worker to start for the next")
-        startNext
-      }
+      STARTED_COUNT -= 1
+      self ! M_MASTER_STOP
     }
 
-  }
-
-  def getReport:String
-
-  @inline
-  def startNext: Unit ={
-    if(!STOPPING){
-      spiderRouter ! M_WORKER_NEXT
-      STARTED_COUNT += 1
-    }else{
-      log.warning("Master has been stopped! Nothing should be continue...")
+    @inline
+    def proxy_empty: Unit ={
+      log.warning("ProxyPool is empty!")
+      self ! M_MASTER_STOP
     }
 
+    @inline
+    def commen_report: Unit ={
+      val report = getReport
+      sender ! report
+    }
   }
+
 }
