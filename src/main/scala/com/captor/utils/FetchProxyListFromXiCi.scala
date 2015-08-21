@@ -6,14 +6,14 @@ package com.captor.utils
 
 import org.openqa.selenium.By
 import org.openqa.selenium.phantomjs.PhantomJSDriver
-
+import java.net.{Proxy => JProxy}
 import scala.xml.{Elem, NodeSeq, PrettyPrinter, XML}
 
 object FetchProxyListFromXiCi {
 
   val TAR_URL="http://www.xici.net.co/nt"
 
-  def getProxyList():Seq[(String,Int,String)]={
+  def getProxyInfoList():Seq[(String,Int,String)]={
     val driver = new PhantomJSDriver()
 
     driver.get(TAR_URL)
@@ -37,26 +37,6 @@ object FetchProxyListFromXiCi {
     res
   }
 
-  def updateConf(proxiesInfo:Seq[(String,Int,String)],confFile:String="conf/proxy.xml"): Unit ={
-    val confXML=XML.load(confFile)
 
-    val newProxies:NodeSeq = proxiesInfo.map{
-      case (ipinfo,portinfo,status)=>
-      <proxy ip={s"${ipinfo}"} port={s"${portinfo}"} />
-    }
 
-    val proxiesChildren = confXML \ "proxies" apply 0 match{
-      case e:Elem => e.copy(child = newProxies)
-    }
-
-    val newConfXML = confXML match {
-      case e:Elem => e.copy(child = proxiesChildren)
-    }
-
-    val pPrinter = new PrettyPrinter(width = 100,step =4)
-    val prettyRes = XML.loadString(pPrinter.formatNodes(newConfXML))
-
-    XML.save(confFile,prettyRes)
-
-  }
 }

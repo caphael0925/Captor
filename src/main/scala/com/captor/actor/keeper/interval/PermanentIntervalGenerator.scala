@@ -1,4 +1,4 @@
-package com.captor.keeper.duration
+package com.captor.actor.keeper.interval
 
 import scala.concurrent.duration.FiniteDuration
 
@@ -7,7 +7,7 @@ import scala.concurrent.duration.FiniteDuration
  */
 class PermanentIntervalGenerator(val NEXT:FiniteDuration) extends IntervalGeneratorLike{
   //返回每次指派对象的访问间隔
-  override def getInterval: FiniteDuration = {
+  override def nextInterval: FiniteDuration = {
     NEXT
   }
 }

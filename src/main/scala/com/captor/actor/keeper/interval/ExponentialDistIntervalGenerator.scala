@@ -1,4 +1,4 @@
-package com.captor.keeper.duration
+package com.captor.actor.keeper.interval
 
 import scala.concurrent.duration._
 import org.apache.spark.mllib.random.ExponentialGenerator
@@ -8,7 +8,7 @@ import org.apache.spark.mllib.random.ExponentialGenerator
 */
 class ExponentialDistIntervalGenerator(meanDur:FiniteDuration) extends IntervalGeneratorLike{
   val generator = new ExponentialGenerator(meanDur.toSeconds)
-  override def getInterval: FiniteDuration = {
+  override def nextInterval: FiniteDuration = {
     generator.nextValue seconds
   }
 }

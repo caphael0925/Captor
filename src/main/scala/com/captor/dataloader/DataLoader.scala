@@ -1,4 +1,4 @@
-package com.captor.dataopt
+package com.captor.dataloader
 
 import scala.xml.Elem
 

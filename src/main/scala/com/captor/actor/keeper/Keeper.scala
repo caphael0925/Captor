@@ -1,10 +1,8 @@
-package com.captor.keeper
+package com.captor.actor.keeper
 
 import akka.event.Logging
-import akka.event.slf4j.Logger
-import com.captor.keeper.duration.IntervalGeneratorLike
-import akka.actor.Actor
-import com.captor.message.SignleRequest._
+import akka.actor.{ActorLogging, Actor}
+import com.captor.message.{M_ELEMENT_RETURN, M_ELEMENT_REQUEST}
 
 /**
  * Created by caphael on 15/8/10.
@@ -14,13 +12,12 @@ import com.captor.message.SignleRequest._
  *  KepperStrategy会以Trait的方式混入到Keeper中
  *
  */
-abstract class Keeper[I,O](val ELEMENT:I) extends Actor{
+abstract class Keeper[I,O](val ELEMENT:I,val tag:String) extends Actor with ActorLogging{
 
-  protected val log = Logging(context.system,this)
   protected def HANDOUT:O
 
   protected def postInstant(out:O):Unit = {
-    sender ! out
+    sender ! M_ELEMENT_RETURN[O](out)
   }
 
   protected def matchOthers:Receive={
@@ -39,7 +36,7 @@ abstract class Keeper[I,O](val ELEMENT:I) extends Actor{
      *  默认情况下matchOther会记录一条MatchError的错误日志
      *  可以通过重写matchOthers来扩展Keeper
      */
-    case ELEMENT_REQUEST =>
+    case M_ELEMENT_REQUEST =>
       try{
         postInstant(HANDOUT)
       }catch{

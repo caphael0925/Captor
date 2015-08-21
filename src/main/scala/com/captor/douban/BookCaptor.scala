@@ -1,4 +1,4 @@
-package com.captor.douban.book
+package com.captor.douban
 
 import java.net.{HttpURLConnection, InetSocketAddress, Proxy => JProxy}
 
@@ -8,12 +8,10 @@ import akka.util.Timeout
 import akka.pattern._
 import com.caphael.common.app.AbstractApp
 import com.caphael.common.cli._
-import com.captor.dataopt.JDBCDataLoader
-import com.captor.keeper.Keeper
-import com.captor.keeper.duration._
-import com.captor.keeper.strategy.PureKeeperWithIntervalStrategy
+import com.captor.dataloader.JDBCDataLoader
+import com.captor.actor.keeper.{PureKeeperWithIntervalStrategy, Keeper}
+import com.captor.actor.keeper.interval._
 import com.captor.utils.ProxyUtils
-import com.captor.message.SignleRequest._
 //import org.apache.spark.{SparkConf, SparkContext}
 
 import scala.collection.mutable._
@@ -30,7 +28,8 @@ object BookCaptor extends AbstractApp{
                      var span:Long=1,
                      var times:Long=6,
                      var spiders:Int=2,
-                     var outpath:String = "output/book.out",
+                     var outpath:String = "output/target.out",
+                     var failedpath:String = "discard/target.out",
                      var outDelim:String = ","
                      ) extends ConfigBase with HasIOput
 

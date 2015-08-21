@@ -1,3 +1,6 @@
+import java.io.File
+
+import com.typesafe.config.ConfigFactory
 
 /**
  * Created by caphael on 15/7/24.
@@ -13,43 +16,53 @@ object AnyTest extends App{
 
   import akka.actor.{Props, ActorSystem}
   import akka.util.Timeout
-  import com.captor.douban.book.BookCaptor.Config
-  import com.captor.douban.book.Master
+  import com.captor.douban.{DoubanMaster, BookCaptor}
+  import com.captor.message._
+  import com.captor.utils.FetchProxyListFromXiCi
   import com.captor.utils.ProxyUtils
+  import com.captor.message._
 
   import scala.io.Source
   import akka.routing._
 
-  import com.captor.message.SignleRequest._
   import akka.pattern._
   import scala.concurrent.duration._
   import scala.concurrent.ExecutionContext.Implicits.global
+  import scala.concurrent.Await
+  import java.net.{Proxy=>JProxy}
 
   implicit val timeout = Timeout(10 seconds)
 
   val system = ActorSystem("Crawler")
-  val conf = Config().copy(spiders = 8)
+  val conf = BookCaptor.Config().copy(spiders = 10)
   val master = system.actorOf(
     Props{
-      new Master(conf)
+      new DoubanMaster(conf)
     },"MASTER"
   )
 
-  val proxy = ProxyUtils.loadProxies()(0)
+  master ! M_MASTER_START
+
+
+  ProxyUtils.writeToXML(FetchProxyListFromXiCi.getProxyInfoList)
+
+  val proxy = ProxyUtils.loadFromXML()(0)
+
 
   val url = "http://api.douban.com/v2/book/1443043"
   val connection: HttpURLConnection = new java.net.URL(url).openConnection(proxy).asInstanceOf[HttpURLConnection]
   Source.fromInputStream(connection.getInputStream).getLines.mkString
 
 
-  master ! MASTER_START
+
+
 
   //获取Master的运行报告
-  (master ? MASTER_REPORT).foreach(println(_))
+  (master ? M_COMMON_REPORT).foreach(println(_))
+  val mself = Await.result[DoubanMaster]((master ? M_COMMON_SELF).mapTo[DoubanMaster],10 seconds)
 
   //检查ProxyRouter容量
-  val proxies=(system.actorSelection(master.path.child("ProxyRouter-RoundRobin")) ? GetRoutees).mapTo[Routees]
-  proxies.value.get.get.routees.length
+  val routees=Await.result[Routees]((mself.proxyRouter ? GetRoutees).mapTo[Routees],10 seconds)
 
   //检查SpiderRouter容量
   val spiders=(system.actorSelection(master.path.child("SpiderRouter-RoundRobin")) ? GetRoutees).mapTo[Routees]

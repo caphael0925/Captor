@@ -1,6 +1,6 @@
 package com.captor.loader
 
-import com.captor.dataopt.{Closable, DataLoader}
+import com.captor.dataloader.{Closable, DataLoader}
 
 import scala.io.Source
 import scala.xml.Elem
