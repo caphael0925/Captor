@@ -2,7 +2,7 @@ package com.captor.actor.keeper
 
 import akka.event.Logging
 import akka.actor.{ActorLogging, Actor}
-import com.captor.message.{M_ELEMENT_RETURN, M_ELEMENT_REQUEST}
+import com.captor.message.{M_COMMON_SELF, M_ELEMENT_RETURN, M_ELEMENT_REQUEST}
 
 /**
  * Created by caphael on 15/8/10.
@@ -20,7 +20,7 @@ abstract class Keeper[I,O](val ELEMENT:I,val tag:String) extends Actor with Acto
     sender ! M_ELEMENT_RETURN[O](out)
   }
 
-  protected def matchOthers:Receive={
+  protected def receiveOthers:Receive={
     case msg:Any => matchNothing(msg)
   }
   protected def matchNothing(msg:Any):Unit = log.error(s"Match Error! Unacceptable Message:${msg}")
@@ -44,8 +44,11 @@ abstract class Keeper[I,O](val ELEMENT:I,val tag:String) extends Actor with Acto
           caseOtherExceptions(e)
       }
 
+    case M_COMMON_SELF =>
+      sender ! this
+
     case msg:Any =>
-      matchOthers(msg)
+      receiveOthers(msg)
 
   }
 }

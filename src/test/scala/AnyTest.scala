@@ -1,6 +1,4 @@
-import java.io.File
-
-import com.typesafe.config.ConfigFactory
+import com.captor.actor.keeper.PureKeeperWithIntervalStrategy
 
 /**
  * Created by caphael on 15/7/24.
@@ -19,6 +17,7 @@ object AnyTest extends App{
   import com.captor.douban.{DoubanMaster, BookCaptor}
   import com.captor.message._
   import com.captor.utils.FetchProxyListFromXiCi
+  import com.captor.utils.FetchProxyListFromPachong
   import com.captor.utils.ProxyUtils
   import com.captor.message._
 
@@ -32,6 +31,8 @@ object AnyTest extends App{
   import java.net.{Proxy=>JProxy}
 
   implicit val timeout = Timeout(10 seconds)
+
+  ProxyUtils.writeToXML(ProxyUtils.getProxyInfoList)
 
   val system = ActorSystem("Crawler")
   val conf = BookCaptor.Config(spiders = 10,outpath = "output/book.out",failedpath = "discard/book.dis")
@@ -53,13 +54,12 @@ object AnyTest extends App{
   val connection: HttpURLConnection = new java.net.URL(url).openConnection(proxy).asInstanceOf[HttpURLConnection]
   Source.fromInputStream(connection.getInputStream).getLines.mkString
 
-
-
-
-
   //获取Master的运行报告
   (master ? M_COMMON_REPORT).foreach(println(_))
   val mself = Await.result[DoubanMaster]((master ? M_COMMON_SELF).mapTo[DoubanMaster],10 seconds)
+  val kself =Await.result[PureKeeperWithIntervalStrategy[JProxy]]((mself.proxyKeepers(0) ? M_COMMON_SELF).mapTo[PureKeeperWithIntervalStrategy[JProxy]], 10 seconds)
+
+  Await.result(mself.futureProxyPoolSize,10 seconds)
 
   //检查ProxyRouter容量
   val routees=Await.result[Routees]((mself.proxyRouter ? GetRoutees).mapTo[Routees],10 seconds)

@@ -13,7 +13,7 @@ object FetchProxyListFromXiCi {
 
   val TAR_URL="http://www.xici.net.co/nt"
 
-  def getProxyInfoList():Seq[(String,Int,String)]={
+  def getProxyInfoList():IndexedSeq[(String,Int,String)]={
     try{
       val driver = new PhantomJSDriver()
 
@@ -37,7 +37,7 @@ object FetchProxyListFromXiCi {
     }catch{
       case e:Exception =>
         e.printStackTrace
-        Seq[(String,Int,String)]()
+        IndexedSeq[(String,Int,String)]()
     }
 
   }

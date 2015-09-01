@@ -8,5 +8,6 @@ import scala.io.Source
  * Created by caphael on 15/8/21.
  */
 trait Crawling {
-  def crawl(url:String,proxy:JProxy):String
+  def crawl(url:String,proxy:JProxy):Any
+  def crawl(url:String):Any
 }

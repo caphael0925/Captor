@@ -15,12 +15,12 @@ class QueueKeeper[T](queue:Queue[T],name:String) extends Keeper[Queue[T],T](queu
 
   override protected def caseOtherExceptions:PartialFunction[Exception,Unit]={
     case e:NoSuchElementException =>
-      e.printStackTrace
+//      e.printStackTrace
       sender ! M_ELEMENT_EMPTY(name)
   }
 
 
-  override protected def matchOthers:Receive = {
+  override protected def receiveOthers:Receive = {
     case M_ELEMENT_ADD(e:T) =>
       ELEMENT.enqueue(e)
       sender ! M_COMMON_SUCCEED

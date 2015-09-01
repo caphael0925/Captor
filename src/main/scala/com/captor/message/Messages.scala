@@ -17,8 +17,13 @@ case object M_MASTER_INIT
 case object M_MASTER_START
 //停止Master
 private[captor] case object M_MASTER_STOP_IMMEDIATE
-//停止请求
+//安全停止
 case object M_MASTER_STOP
+//暂停Master
+case object M_MASTER_PAUSE
+//恢复Master
+case object M_MASTER_RESUME
+
 
 /** ========================================
   * Common Messages
@@ -65,6 +70,8 @@ case object M_ELEMENT_QUEUE
 case object M_ELEMENT_SIZE
 //Clean the Queue Keeper
 case object M_ELEMENT_CLEAR
+//The next time keeper to hand out element
+case object M_ELEMENT_NEXT_HANDOUT
 //Return the element
 case class M_ELEMENT_RETURN[T](private val elem:T){
   def get:T = elem
@@ -90,4 +97,8 @@ case class M_SERIALIZE_WRITE[T](msg:T)
   * Routing Messages
   */
 //Router的Routee已经空了
-case object M_ROUTE_ROUTEE_EMPTY
+case object M_ROUTER_ROUTEE_EMPTY
+//Refresh Routees of ProxyRouter decently
+case object M_ROUTER_REFRESH
+//Refresh Routees of ProxyRouter by force
+case object M_ROUTER_REFRESH_FORCE

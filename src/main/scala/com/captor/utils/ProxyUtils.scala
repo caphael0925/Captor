@@ -43,7 +43,14 @@ object ProxyUtils {
     ptype match {
       case "HTTP" =>
         new JProxy(JProxy.Type.HTTP,new InetSocketAddress(ip,port))
+      case _ =>
+        new JProxy(JProxy.Type.HTTP,new InetSocketAddress(ip,port))
     }
   }
 
+  def getProxyInfoList:IndexedSeq[(String,Int,String)]={
+    FetchProxyListFromXiCi.getProxyInfoList ++ FetchProxyListFromPachong.getProxyInfoList()
+  }
+
+  val STRIKER = createProxy("0.0.0.0",0)
 }
