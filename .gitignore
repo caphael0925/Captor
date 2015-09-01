@@ -1,0 +1,7 @@
+*.out
+/.idea/
+logs/*
+/doc/
+/testdata/
+/target/
+/project/
